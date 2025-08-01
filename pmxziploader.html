@@ -1,241 +1,266 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>PMX Loader from ZIP</title>
-<style>
-body{margin:0;overflow:hidden;background:#000;font-family:monospace}
-#loading{position:absolute;top:10px;left:10px;color:#0f0;background:#000;padding:4px 10px;font-size:14px;z-index:10}
-#log{position:absolute;bottom:0;left:0;width:100%;height:150px;overflow-y:auto;background:rgba(0,0,0,.8);color:#0f0;font-size:12px;padding:5px;box-sizing:border-box;white-space:pre-wrap}
-#controls{position:absolute;top:10px;right:10px;z-index:10}
-.control-btn{font-size:20px;padding:10px;margin:5px;background:#333;color:#fff;border:none;border-radius:6px;cursor:pointer;user-select:none}
-</style>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>PMX Loader from ZIP</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #000; font-family: monospace; }
+    #loading { position: absolute; top: 10px; left: 10px; color: #0f0; background: #000; padding: 4px 10px; font-size: 14px; z-index: 10; }
+    #log { position: absolute; bottom: 0; left: 0; width: 100%; height: 150px; overflow-y: auto; background: rgba(0,0,0,.8); color: #0f0; font-size: 12px; padding: 5px; box-sizing: border-box; white-space: pre-wrap; }
+    #controls { position: absolute; top: 10px; right: 10px; z-index: 10; }
+    .control-btn { font-size: 20px; padding: 10px; margin: 5px; background: #333; color: #fff; border: none; border-radius: 6px; cursor: pointer; user-select: none; }
+  </style>
 </head>
 <body>
-<div id="loading">Initializing PMX loader...</div>
-<div id="log"></div>
-<div id="controls">
-  <button class="control-btn" id="zoomIn">＋</button>
-  <button class="control-btn" id="zoomOut">−</button>
-</div>
+  <div id="loading">Initializing PMX loader...</div>
+  <div id="log"></div>
+  <div id="controls">
+    <button class="control-btn" id="zoomIn">＋</button>
+    <button class="control-btn" id="zoomOut">−</button>
+  </div>
 
-<script src="./libs/three.js"></script>
-<script src="./libs/mmdparser-obsolete.min.js"></script>
-<script src="./libs/ammo.min.js"></script>
-<script src="./libs/TGALoader.js"></script>
-<script src="./libs/MMDLoader.js"></script>
-<script src="./libs/MMDAnimationHelper.js"></script>
-<script src="./libs/CCDIKSolver.js"></script>
-<script src="./libs/MMDPhysics.js"></script>
+  <script src="./libs/three.js"></script>
+  <script src="./libs/mmdparser-obsolete.min.js"></script>
+  <script src="./libs/ammo.min.js"></script>
+  <script src="./libs/TGALoader.js"></script>
+  <script src="./libs/MMDLoader.js"></script>
+  <script src="./libs/MMDAnimationHelper.js"></script>
+  <script src="./libs/CCDIKSolver.js"></script>
+  <script src="./libs/MMDPhysics.js"></script>
 
-<script>
-function log(...args){
-  const msg = args.join(' ');
-  console.log(msg);
-  const logEl = document.getElementById('log');
-  logEl.textContent += msg + '\n';
-  logEl.scrollTop = logEl.scrollHeight;
-}
+  <script>
+    function log(...args){
+      const msg = args.join(' ');
+      console.log(msg);
+      const logEl = document.getElementById('log');
+      logEl.textContent += msg + '\n';
+      logEl.scrollTop = logEl.scrollHeight;
+    }
 
-const currentDir = new URL('.', window.location.href).href;
-const swPath = new URL('zipfs-sw.js', currentDir).href;
-const FALLBACK_ZIP = new URL('models/AoiZaizen.zip', currentDir).href;
+    const currentDir = new URL('.', window.location.href).href;
+    const swPath = new URL('zipfs-sw.js', currentDir).href;
+    const FALLBACK_ZIP = new URL('models/AoiZaizen.zip', currentDir).href;
 
-function getZipUrl(){
-  const params = new URLSearchParams(window.location.search);
-  const zip = params.get('pmx');
-  if(zip) return new URL(zip, window.location.href).href;
-  log('No ?pmx= query parameter found; falling back to default ZIP');
-  return FALLBACK_ZIP;
-}
+    function getZipUrl(){
+      const params = new URLSearchParams(window.location.search);
+      const zip = params.get('pmx');
+      if(zip) return new URL(zip, window.location.href).href;
+      log('No ?pmx= query parameter found; falling back to default ZIP');
+      return FALLBACK_ZIP;
+    }
 
-// Extract PMX filename inside ZIP (optional query param ?model=MyModel.pmx)
-// If not specified, infer from ZIP filename by replacing .zip with .pmx
-function getPmxFileName(){
-  const params = new URLSearchParams(window.location.search);
-  let modelFile = params.get('model');
-  if(modelFile){
-    if(!modelFile.startsWith('/')) modelFile = '/' + modelFile;
-    return modelFile;
-  }
-  // fallback: infer from zip filename
-  const zipUrl = getZipUrl();
-  const zipBase = zipUrl.split('/').pop().replace(/\.zip$/i, '');
-  return '/' + zipBase + '.pmx';
-}
+    function getPmxFileName(){
+      const params = new URLSearchParams(window.location.search);
+      let modelFile = params.get('model');
+      if(modelFile){
+        if(!modelFile.startsWith('/')) modelFile = '/' + modelFile;
+        return modelFile;
+      }
+      const zipUrl = getZipUrl();
+      const zipBase = zipUrl.split('/').pop().replace(/\.zip$/i, '');
+      return '/' + zipBase + '.pmx';
+    }
 
-const zipPath = getZipUrl();
-const pmxFileName = getPmxFileName();
+    const zipPath = getZipUrl();
+    const pmxFileName = getPmxFileName();
 
-const vmdName = 'bts-bestofme';
+    const vmdName = 'bts-bestofme';
 
-if('serviceWorker' in navigator){
-  navigator.serviceWorker.register(swPath).then(reg=>{
-    log(`Service Worker registered at: ${swPath}`);
-    if(!navigator.serviceWorker.controller) setTimeout(()=>location.reload(),500);
-    else{
-      navigator.serviceWorker.controller.postMessage({type:'SET_ZIP_PATH',zipPath});
+    if('serviceWorker' in navigator){
+      navigator.serviceWorker.register(swPath).then(reg=>{
+        log(`Service Worker registered at: ${swPath}`);
+        if(!navigator.serviceWorker.controller) setTimeout(()=>location.reload(),500);
+        else{
+          navigator.serviceWorker.controller.postMessage({type:'SET_ZIP_PATH',zipPath});
+          initLoader();
+        }
+      }).catch(err=>{
+        log('SW registration failed:', err);
+        initLoader();
+      });
+
+      navigator.serviceWorker.addEventListener('message',event=>{
+        if(event.data && event.data.type==='SW_LOG') log('[SW]', event.data.text);
+      });
+    }else{
+      log('Service Workers not supported');
       initLoader();
     }
-  }).catch(err=>{
-    log('SW registration failed:', err);
-    initLoader();
-  });
 
-  navigator.serviceWorker.addEventListener('message',event=>{
-    if(event.data && event.data.type==='SW_LOG') log('[SW]', event.data.text);
-  });
-}else{
-  log('Service Workers not supported');
-  initLoader();
-}
+    async function initLoader(){
+      log('Initializing PMX loader...');
+      log(`ZIP path: ${zipPath}`);
+      log(`PMX model path inside ZIP: ${pmxFileName}`);
+      log(`VMD name: ${vmdName}`);
 
-async function initLoader(){
-  log('Initializing PMX loader...');
-  log(`ZIP path: ${zipPath}`);
-  log(`PMX model path inside ZIP: ${pmxFileName}`);
-  log(`VMD name: ${vmdName}`);
+      let scene, renderer, camera, mesh, helper;
+      let ready = false;
+      const clock = new THREE.Clock();
+      let theta = Math.PI / 4, phi = Math.PI / 4, radius = 50;
+      let isMouseDown = false, previousMousePosition = {x: 0, y: 0};
 
-  let scene, renderer, camera, mesh, helper;
-  let ready = false;
-  const clock = new THREE.Clock();
-  let theta = Math.PI/4, phi = Math.PI/4, radius = 50;
-  let isMouseDown = false, previousMousePosition = {x:0,y:0};
+      function initScene(){
+        scene = new THREE.Scene();
+        scene.add(new THREE.AmbientLight(0xeeeeee));
+        renderer = new THREE.WebGLRenderer({alpha:true,antialias:true});
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
 
-  function initScene(){
-    scene = new THREE.Scene();
-    scene.add(new THREE.AmbientLight(0xeeeeee));
-    renderer = new THREE.WebGLRenderer({alpha:true,antialias:true});
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(renderer.domElement);
+        camera = new THREE.PerspectiveCamera(40, window.innerWidth/window.innerHeight, 1, 1000);
+        updateCameraPosition();
 
-    camera = new THREE.PerspectiveCamera(40, window.innerWidth/window.innerHeight, 1, 1000);
-    updateCameraPosition();
+        document.addEventListener('mousedown', onMouseDown);
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+        window.addEventListener('resize', onWindowResize);
 
-    document.addEventListener('mousedown', onMouseDown);
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
-    window.addEventListener('resize', onWindowResize);
+        // Touch controls
+        document.addEventListener('touchstart', onTouchStart);
+        document.addEventListener('touchmove', onTouchMove);
+        document.addEventListener('touchend', onTouchEnd);
 
-    document.getElementById('zoomIn').addEventListener('click', ()=>zoomCamera(-5));
-    document.getElementById('zoomOut').addEventListener('click', ()=>zoomCamera(5));
-  }
+        document.getElementById('zoomIn').addEventListener('click', ()=>zoomCamera(-5));
+        document.getElementById('zoomOut').addEventListener('click', ()=>zoomCamera(5));
+      }
 
-  function onMouseDown(e){e.preventDefault(); isMouseDown=true; previousMousePosition={x:e.clientX,y:e.clientY};}
-  function onMouseMove(e){
-    if(!isMouseDown) return;
-    e.preventDefault();
-    const dx = e.clientX - previousMousePosition.x;
-    const dy = e.clientY - previousMousePosition.y;
-    theta -= dx * 0.005;
-    phi -= dy * 0.005;
-    phi = Math.min(Math.max(phi,0.01), Math.PI-0.01);
-    updateCameraPosition();
-    previousMousePosition = {x:e.clientX,y:e.clientY};
-  }
-  function onMouseUp(e){e.preventDefault(); isMouseDown=false;}
-  function zoomCamera(delta){
-    radius += delta;
-    radius = Math.min(Math.max(radius,10),200);
-    updateCameraPosition();
-  }
-  function updateCameraPosition(){
-    camera.position.x = radius * Math.sin(phi) * Math.cos(theta);
-    camera.position.y = radius * Math.cos(phi);
-    camera.position.z = radius * Math.sin(phi) * Math.sin(theta);
-    camera.lookAt(scene.position);
-  }
-  function onWindowResize(){
-    camera.aspect = window.innerWidth/window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  }
+      function onMouseDown(e){e.preventDefault(); isMouseDown=true; previousMousePosition={x:e.clientX,y:e.clientY};}
+      function onMouseMove(e){
+        if(!isMouseDown) return;
+        e.preventDefault();
+        const dx = e.clientX - previousMousePosition.x;
+        const dy = e.clientY - previousMousePosition.y;
+        theta -= dx * 0.005;
+        phi -= dy * 0.005;
+        phi = Math.min(Math.max(phi,0.01), Math.PI-0.01);
+        updateCameraPosition();
+        previousMousePosition = {x:e.clientX,y:e.clientY};
+      }
+      function onMouseUp(e){e.preventDefault(); isMouseDown=false;}
 
-  async function loadModel(){
-    document.getElementById('loading').textContent = 'Loading model from ZIP...';
-    return new Promise((resolve, reject) => {
-      const loader = new THREE.MMDLoader();
-      loader.load(pmxFileName,
-        object => {
-          mesh = object;
-          mesh.position.y = -10;
-          scene.add(mesh);
-          document.getElementById('loading').textContent = 'Loading animation...';
-          log('PMX model loaded successfully from ZIP');
-          resolve();
-        },
-        xhr => {
-          if(xhr.lengthComputable){
-            const percent = (xhr.loaded / xhr.total) * 100;
-            document.getElementById('loading').textContent = `Loading model... ${percent.toFixed(1)}%`;
-          }
-        },
-        err => {
-          log('Model load error:', err);
-          document.getElementById('loading').textContent = 'Model load failed!';
-          reject(err);
+      // Touch controls
+      let touchStartX = 0, touchStartY = 0;
+      function onTouchStart(e) {
+        e.preventDefault();
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+      }
+      function onTouchMove(e) {
+        e.preventDefault();
+        const dx = e.touches[0].clientX - touchStartX;
+        const dy = e.touches[0].clientY - touchStartY;
+        theta -= dx * 0.005;
+        phi -= dy * 0.005;
+        phi = Math.min(Math.max(phi, 0.01), Math.PI - 0.01);
+        updateCameraPosition();
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+      }
+      function onTouchEnd(e) { e.preventDefault(); }
+
+      function zoomCamera(delta){
+        radius += delta;
+        radius = Math.min(Math.max(radius,10),200);
+        updateCameraPosition();
+      }
+
+      function updateCameraPosition(){
+        camera.position.x = radius * Math.sin(phi) * Math.cos(theta);
+        camera.position.y = radius * Math.cos(phi);
+        camera.position.z = radius * Math.sin(phi) * Math.sin(theta);
+        camera.lookAt(scene.position);
+      }
+
+      function onWindowResize(){
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+
+      async function loadModel(){
+        document.getElementById('loading').textContent = 'Loading model from ZIP...';
+        return new Promise((resolve, reject) => {
+          const loader = new THREE.MMDLoader();
+          loader.load(pmxFileName,
+            object => {
+              mesh = object;
+              mesh.position.y = -10;
+              scene.add(mesh);
+              document.getElementById('loading').textContent = 'Loading animation...';
+              log('PMX model loaded successfully from ZIP');
+              resolve();
+            },
+            xhr => {
+              if(xhr.lengthComputable){
+                const percent = (xhr.loaded / xhr.total) * 100;
+                document.getElementById('loading').textContent = `Loading model... ${percent.toFixed(1)}%`;
+              }
+            },
+            err => {
+              log('Model load error:', err);
+              document.getElementById('loading').textContent = 'Model load failed!';
+              reject(err);
+            });
         });
-    });
-  }
+      }
 
-  async function loadAnimation(){
-    return new Promise((resolve, reject) => {
-      const loader = new THREE.MMDLoader();
-      const vmdPath = new URL(`vmd/${vmdName}.vmd`, currentDir).href;
-      log(`Loading VMD from: ${vmdPath}`);
-      loader.loadAnimation(vmdPath, mesh,
-        vmdClip => {
-          vmdClip.name = vmdName;
+      async function loadAnimation(){
+        return new Promise((resolve, reject) => {
+          const loader = new THREE.MMDLoader();
+          const vmdPath = new URL(`vmd/${vmdName}.vmd`, currentDir).href;
+          log(`Loading VMD from: ${vmdPath}`);
+          loader.loadAnimation(vmdPath, mesh,
+            vmdClip => {
+              vmdClip.name = vmdName;
+              setupAnimation(vmdClip);
+              document.getElementById('loading').style.display = 'none';
+              log('Animation loaded successfully');
+              resolve();
+            },
+            xhr => {
+              if(xhr.lengthComputable){
+                const percent = (xhr.loaded / xhr.total) * 100;
+                document.getElementById('loading').textContent = `Loading animation... ${percent.toFixed(1)}%`;
+              }
+            },
+            err => {
+              log('Animation load error:', err);
+              document.getElementById('loading').textContent = 'Animation load failed!';
+              reject(err);
+            });
+        });
+      }
+
+      function setupAnimation(vmdClip){
+        ready = false;
+        helper = new THREE.MMDAnimationHelper({afterglow: 2, resetPhysicsOnLoop: true});
+        helper.add(mesh, { animation: vmdClip, physics: true });
+        const mixer = helper.objects.get(mesh).mixer;
+        mixer.addEventListener('finished', () => {
+          log('Animation finished. Restarting...');
           setupAnimation(vmdClip);
-          document.getElementById('loading').style.display = 'none';
-          log('Animation loaded successfully');
-          resolve();
-        },
-        xhr => {
-          if(xhr.lengthComputable){
-            const percent = (xhr.loaded / xhr.total) * 100;
-            document.getElementById('loading').textContent = `Loading animation... ${percent.toFixed(1)}%`;
-          }
-        },
-        err => {
-          log('Animation load error:', err);
-          document.getElementById('loading').textContent = 'Animation load failed!';
-          reject(err);
         });
-    });
-  }
+        ready = true;
+      }
 
-  function setupAnimation(vmdClip){
-    ready = false;
-    helper = new THREE.MMDAnimationHelper({afterglow:2,resetPhysicsOnLoop:true});
-    helper.add(mesh, {animation: vmdClip, physics: false});
-    const mixer = helper.objects.get(mesh).mixer;
-    mixer.addEventListener('finished', ()=> {
-      log('Animation finished. Restarting...');
-      setupAnimation(vmdClip);
-    });
-    ready = true;
-  }
+      function animate(){
+        requestAnimationFrame(animate);
+        if(ready && helper) helper.update(clock.getDelta());
+        renderer.render(scene, camera);
+      }
 
-  function animate(){
-    requestAnimationFrame(animate);
-    if(ready && helper) helper.update(clock.getDelta());
-    renderer.render(scene, camera);
-  }
+      initScene();
 
-  initScene();
-
-  try {
-    await loadModel();
-    await loadAnimation();
-    animate();
-    log('PMX viewer ready');
-  } catch(e) {
-    log('Initialization failed:', e);
-  }
-}
-</script>
+      try {
+        await loadModel();
+        await loadAnimation();
+        animate();
+        log('PMX viewer ready');
+      } catch(e) {
+        log('Initialization failed:', e);
+      }
+    }
+  </script>
 </body>
 </html>
